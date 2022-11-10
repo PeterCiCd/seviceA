@@ -9,4 +9,4 @@ server:
     include-binding-errors: always
 
 message:
-  string: service_a_вторник
+  string: service_a
