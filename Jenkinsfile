@@ -12,6 +12,12 @@ pipeline {
             choices: ['no', 'yes'],
             description: 'Shall we build docker image'
         )
+        
+        choice (
+            name: 'DOCKER_PUSH',
+            choices: ['nexus', 'cloud'],
+            description: 'Shall we build docker image'
+        )
 
         string (
             name: 'DOCKER_TAG',
@@ -58,7 +64,7 @@ pipeline {
             }
         }
 
-       stage("Docker build and push"){
+       stage("Docker build"){
            when {
                anyOf {
                    branch 'master'
@@ -69,12 +75,47 @@ pipeline {
                TAG = "${params.DOCKER_TAG}"
            }
            steps {
-               withCredentials([usernamePassword(credentialsId: 'NEXUS_USER', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]){
                    sh 'docker build -t service-a:$TAG .'
+           }
+       }
+        
+       stage("Docker push nexus"){
+           when {
+               anyOf {
+                   branch 'master'
+                   expression { params.DOCKER_PUSH == 'nexus' }
+              }
+           }
+           environment {
+               TAG = "${params.DOCKER_TAG}"
+           }
+           steps {
+               withCredentials([usernamePassword(credentialsId: 'NEXUS_USER', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]){
                    sh 'docker tag service-a:$TAG  nexus.docker.internal:5000/repository/demo/service-a:$TAG'
                    sh 'docker login --username $USERNAME --password $PASSWORD http://nexus.docker.internal:5000/repository/demo '
                    sh 'docker push  nexus.docker.internal:5000/repository/demo/service-a:$TAG'
                    sh 'docker rmi  nexus.docker.internal:5000/repository/demo/service-a:$TAG'
+               }
+           }
+       }
+       
+        stage("Docker push hub.docker.com"){
+           when {
+               anyOf {
+                   branch 'master'
+                   expression { params.DOCKER_PUSH == 'cloud' }
+              }
+           }
+           environment {
+               TAG = "${params.DOCKER_TAG}"
+           }
+           steps {
+               withCredentials([usernamePassword(credentialsId: 'HubDockerUser', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]){
+                   sh 'docker build -t service-a:$TAG .'
+                   sh 'docker tag service-a:$TAG  petercicd/service-a:$TAG'
+                   sh 'docker login --username $USERNAME --password $PASSWORD '
+                   sh 'docker push  petercicd/service-a:$TAG'
+                   sh 'docker rmi  petercicd/service-a:$TAG'
                }
            }
        }
