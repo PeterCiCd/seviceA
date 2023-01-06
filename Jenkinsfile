@@ -10,12 +10,14 @@ pipeline {
         choice (
             name: 'DOCKER_BUILD',
             choices: ['no', 'yes'],
+            defaultValue: 'yes',
             description: 'Shall we build docker image'
         )
         
         choice (
             name: 'DOCKER_PUSH',
             choices: ['nexus', 'cloud'],
+            defaultValue: 'cloud',
             description: 'Shall we build docker image'
         )
 
