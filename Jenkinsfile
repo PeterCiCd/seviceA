@@ -48,6 +48,9 @@ pipeline {
         }
 
         stage("Upload jar artifact") {
+           when {           
+                   branch 'master'
+           }            
             steps {
                 withCredentials([usernamePassword(credentialsId: 'NEXUS_USER', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]){
                     sh 'ls target '
