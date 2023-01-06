@@ -81,8 +81,8 @@ pipeline {
         
        stage("Docker push nexus"){
            when {
-               anyOf {
-                   branch 'master'
+               allOf {
+                   expression { params.DOCKER_BUILD == 'yes' }
                    expression { params.DOCKER_PUSH == 'nexus' }
               }
            }
@@ -102,7 +102,7 @@ pipeline {
         stage("Docker push hub.docker.com"){
            when {
                anyOf {
-                   branch 'master'
+                   expression { params.DOCKER_BUILD == 'yes' }
                    expression { params.DOCKER_PUSH == 'cloud' }
               }
            }
