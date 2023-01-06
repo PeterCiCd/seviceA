@@ -75,6 +75,10 @@ pipeline {
                TAG = "${params.DOCKER_TAG}"
            }
            steps {
+                   sh 'ls'
+                   echo ''
+                   sh 'ls target '
+                   echo 'build'
                    sh 'docker build -t service-a:$TAG .'
            }
        }
