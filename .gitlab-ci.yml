@@ -1,0 +1,55 @@
+image: maven:latest
+
+include:
+- template: Code-Quality.gitlab-ci.yml
+
+code_quality:
+  variables:
+    REPORT_FORMAT: html
+  artifacts:
+    paths: [gl-code-quality-report.html]
+
+stages:          # List of stages for jobs, and their order of execution
+  - build
+  - test
+  - package
+  - dockerise
+  - deploy
+
+build-job:       # This job runs in the build stage, which runs first.
+  stage: build
+  script:
+    - mvn compile -Dmaven.test.skip=true -Dapp=$CI_PROJECT_NAME 
+
+unit-test-job:   # This job runs in the test stage.
+  stage: test    # It only starts when the job in the build stage completes successfully.
+  script:
+    - mvn test
+  artifacts:
+    when: always
+    paths:
+      - target/surefire-reports/**/*.xml
+    reports:
+      junit: target/surefire-reports/**/*.xml
+
+build-job:       # This job runs in the build stage, which runs first.
+  stage: package
+  script:
+    - mvn clean package -Dmaven.test.skip=true -Dapp=$CI_PROJECT_NAME
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 2 day
+
+dockerise-job:
+  stage: dockerise
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD"
+  after_script:
+    - docker logout
+  script:
+    - docker build -t $REGISTRY_IMAGE/$CI_PROJECT_NAME:latest .
+    - docker push  $REGISTRY_IMAGE/$CI_PROJECT_NAME:latest
