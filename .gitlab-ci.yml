@@ -1,0 +1,75 @@
+image: maven:latest
+
+include:
+- template: Code-Quality.gitlab-ci.yml
+
+code_quality:
+  variables:
+    REPORT_FORMAT: html
+  artifacts:
+    paths: [gl-code-quality-report.html]
+
+stages:          # List of stages for jobs, and their order of execution
+  - build
+  - test
+  - package
+  - dockerise
+  - deploy
+
+build-job:       # This job runs in the build stage, which runs first.
+  stage: build
+  script:
+    - mvn compile -Dmaven.test.skip=true -Dapp=$CI_PROJECT_NAME 
+
+unit-test-job:   # This job runs in the test stage.
+  stage: test    # It only starts when the job in the build stage completes successfully.
+  script:
+    - mvn test
+  artifacts:
+    when: always
+    paths:
+      - target/surefire-reports/**/*.xml
+    reports:
+      junit: target/surefire-reports/**/*.xml
+
+build-job:       # This job runs in the build stage, which runs first.
+  stage: package
+  script:
+    - mvn clean package -Dmaven.test.skip=true -Dapp=$CI_PROJECT_NAME
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 2 day
+
+dockerise-job:
+  stage: dockerise
+  image: docker:latest
+  services:
+    - docker:dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD"
+  after_script:
+    - docker logout
+  script:
+    - docker build -t $REGISTRY_IMAGE/$CI_PROJECT_NAME:latest .
+    - docker push  $REGISTRY_IMAGE/$CI_PROJECT_NAME:latest
+
+deploy-job:
+  stage: deploy
+  image:
+    # name: bitnami/kubectl:latest
+    name: bitnami/kubectl:1.24.6-debian-11-r3 # в этой версии есть curl, в последующих удален
+    entrypoint: ['']
+  script:
+    # Для подключения к ксластеру использую тунель через ngrok, но при первом обращении получаем
+    # browser-warning, поэтому сначала дерним ресурс через curl
+    # в работе этого не должно быть. 
+    - curl -H 'ngrok-skip-browser-warning:69420' $K8S_SERVER_URL
+    - git clone --branch cloud https://github.com/PeterCiCd/k8s.git
+    - kubectl apply -f k8s/$CI_PROJECT_NAME/deployment.yml  --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
+    - kubectl apply -f k8s/$CI_PROJECT_NAME/service.yml  --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
+    # в учебных целях посмотрим что задеплоили, в работе не надо.
+    - kubectl get deployment --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
+    - kubectl describe deployment $CI_PROJECT_NAME --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
+    - kubectl get pods --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify 
+  when: manual # запуск job руками.
