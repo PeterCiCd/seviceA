@@ -53,8 +53,6 @@ dockerise-job:
   script:
     - docker build -t $REGISTRY_IMAGE/$CI_PROJECT_NAME:latest .
     - docker push  $REGISTRY_IMAGE/$CI_PROJECT_NAME:latest
-  dependencies:
-    - build-job
 
 deploy-job:
   stage: deploy
