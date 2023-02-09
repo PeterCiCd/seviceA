@@ -66,10 +66,10 @@ deploy-job:
     # в работе этого не должно быть. 
     - curl -H 'ngrok-skip-browser-warning:69420' $K8S_SERVER_URL
     - git clone --branch cloud https://github.com/PeterCiCd/k8s.git
-    - kubectl delete deployment $CI_PROJECT_NAME --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
-    - kubectl delete service $CI_PROJECT_NAME --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
-    - kubectl apply -f k8s/$CI_PROJECT_NAME/deployment.yml  --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
-    - kubectl apply -f k8s/$CI_PROJECT_NAME/service.yml  --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
+#     - kubectl delete deployment $CI_PROJECT_NAME --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
+#     - kubectl delete service $CI_PROJECT_NAME --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
+    - kubectl replace --force -f k8s/$CI_PROJECT_NAME/deployment.yml  --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
+    - kubectl replace --force -f k8s/$CI_PROJECT_NAME/service.yml  --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
     # в учебных целях посмотрим что задеплоили, в работе не надо.
     - kubectl get deployment --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
     - kubectl describe deployment $CI_PROJECT_NAME --kubeconfig $K8S_CONFIG --insecure-skip-tls-verify
