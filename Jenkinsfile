@@ -1,21 +1,25 @@
 pipeline {
-    agent
-     {
+    agent {
         label "mvn_agent"
     }
-    environment {
-        PACKAGE_VERSION = "${GIT_BRANCH}-${GIT_COMMIT}"
+
+    options {
+        ansiColor('xterm')
     }
+    
+    tools{
+        maven 'M3'
+        dockerTool 'docker'        
+    }
+    
+    environment {
+        PACKAGE_VERSION = "dev"
+    }
+    
     parameters {
         choice (
             name: 'DOCKER_BUILD',
             choices: ['no', 'yes'],
-            description: 'Shall we build docker image'
-        )
-        
-        choice (
-            name: 'DOCKER_PUSH',
-            choices: ['nexus', 'cloud'],
             description: 'Shall we build docker image'
         )
 
@@ -25,32 +29,34 @@ pipeline {
             description: 'Tag of docker image'
         )
     }
-    tools {
-        dockerTool 'docker'
-    }
-
-    stages{
-
-        stage("Run tests"){
-            steps{
-                sh 'mvn test'
-            }
-        }
-        
-        stage("Build maven"){
+    
+    stages {
+        stage('SCM') {
             steps {
-                sh 'mvn package \
-                -Dmaven.test.skip=true \
-                -Dapp=serviceA \
-                -Drevision=$PACKAGE_VERSION'
-                sh 'ls -la target/'
+                // Get some code from a GitHub repository
+                git branch: 'senior', url: 'https://github.com/PeterCiCd/seviceA.git'
             }
         }
+        stage('Build') {
+            steps {
 
+                // Run Maven on a Unix agent.
+                sh 'mvn   -Dmaven.test.skip=true \
+                            -Dapp=serviceA \
+                            -Drevision=$PACKAGE_VERSION \
+                            clean package'
+
+            }
+        }
+        stage('Test') {
+            steps {
+
+                // Run Maven on a Unix agent.
+                sh "mvn test"
+
+            }
+        }
         stage("Upload jar artifact") {
-           when {           
-                   branch 'master'
-           }            
             steps {
                 withCredentials([usernamePassword(credentialsId: 'NEXUS_USER', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]){
                     sh 'ls target '
@@ -60,37 +66,17 @@ pipeline {
                         -F maven2.asset1.extension=jar \
                         -F maven2.asset1=@target/serviceA-$PACKAGE_VERSION.jar \
                         -F maven2.artifactId=serviceA \
-                        -F maven2.version=${GIT_COMMIT} \
-                        -u $USERNAME:$PASSWORD http://192.168.0.146:8081/service/rest/v1/components?repository=maven-dev
+                        -F maven2.version=$PACKAGE_VERSION \
+                        -u $USERNAME:$PASSWORD $NEXUS_MAVN_URL/service/rest/v1/components?repository=maven-dev
                     '''
                 }
             }
         }
-
-       stage("Docker build"){
+        stage("Docker build and push"){
            when {
                anyOf {
-                   branch 'master'
+                   branch 'senior'
                    expression { params.DOCKER_BUILD == 'yes' }
-              }
-           }
-           environment {
-               TAG = "${params.DOCKER_TAG}"
-           }
-           steps {
-                   sh 'ls'
-                   echo ''
-                   sh 'ls target '
-                   echo 'build'
-                   sh 'docker build -t service-a:$TAG .'
-           }
-       }
-        
-       stage("Docker push nexus"){
-           when {
-               allOf {
-                   expression { params.DOCKER_BUILD == 'yes' }
-                   expression { params.DOCKER_PUSH == 'nexus' }
               }
            }
            environment {
@@ -98,40 +84,24 @@ pipeline {
            }
            steps {
                withCredentials([usernamePassword(credentialsId: 'NEXUS_USER', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]){
-                   sh 'docker tag service-a:$TAG  192.168.0.146:5000/repository/demo/service-a:$TAG'
-                   sh 'docker login --username $USERNAME --password $PASSWORD 192.168.0.146:5000/repository/demo '
-                   sh 'docker push  192.168.0.146:5000/repository/demo/service-a:$TAG'
-                   sh 'docker rmi  192.168.0.146:5000/repository/demo/service-a:$TAG'
+                   sh 'docker build -t $NEXUS_DOCKER_IP_PORT/repository/demo/service-a:$TAG .'
+                //   sh 'docker tag service-a:$TAG  $NEXUS_DOCKER_IP_PORT/repository/demo/service-a:$TAG'
+                   sh 'docker login --username $USERNAME --password $PASSWORD http://$NEXUS_DOCKER_IP_PORT/repository/demo '
+                   sh 'docker push  $NEXUS_DOCKER_IP_PORT/repository/demo/service-a:$TAG'
+                   sh 'docker rmi  $NEXUS_DOCKER_IP_PORT/repository/demo/service-a:$TAG'
                }
            }
        }
-       
-        stage("Docker push hub.docker.com"){
-           when {
-               anyOf {
-                   expression { params.DOCKER_BUILD == 'yes' }
-                   expression { params.DOCKER_PUSH == 'cloud' }
-              }
-           }
-           environment {
-               TAG = "${params.DOCKER_TAG}"
-           }
-           steps {
-               withCredentials([usernamePassword(credentialsId: 'HubDockerUser', usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]){
-                   sh 'docker build -t service-a:$TAG .'
-                   sh 'docker tag service-a:$TAG  petercicd/service-a:$TAG'
-                   sh 'docker login --username $USERNAME --password $PASSWORD '
-                   sh 'docker push  petercicd/service-a:$TAG'
-                   sh 'docker rmi  petercicd/service-a:$TAG'
-               }
-           }
-       }
-
     }
-    post{
-        always{
-            junit 'target/surefire-reports/**/*.xml'
+    
+    post {
+        // If Maven was able to run the tests, even if some of the test
+        // failed, record the test results and archive the jar file.
+        always {
+            junit '**/target/surefire-reports/*.xml'
+            archiveArtifacts 'target/*.jar'            
             cleanWs()
         }
     }
+        
 }
